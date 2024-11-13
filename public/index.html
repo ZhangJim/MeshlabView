@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>OBJ 模型查看器</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        #file-input {
+            margin-bottom: 10px;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .slider {
+            width: 150px;
+        }
+        #viewport-controls {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .viewport-button {
+            width: 40px;
+            height: 40px;
+            margin: 5px;
+            background: #444;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .viewport-button:hover {
+            background: #666;
+        }
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 30px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #2196F3;
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(30px);
+        }
+        .model-controls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #555;
+        }
+        .model-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 5px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+        .model-item input[type="number"] {
+            width: 60px;
+            margin: 0 5px;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 2px 5px;
+        }
+        .model-item button {
+            margin-left: 5px;
+            background: #444;
+            border: none;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .model-item button:hover {
+            background: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <!-- 在 controls div 中添加 -->
+<div class="scene-controls">
+    <button id="save-scene">保存场景</button>
+    <div id="saved-scenes">
+        <div id="scene-list"></div>
+    </div>
+</div>
+
+<style>
+    .scene-controls {
+        margin-top: 20px;
+        padding-top: 10px;
+        border-top: 1px solid #555;
+    }
+    .saved-scene {
+        background: rgba(255,255,255,0.1);
+        margin: 10px 0;
+        padding: 10px;
+        border-radius: 5px;
+    }
+    .scene-link {
+        color: #2196F3;
+        word-break: break-all;
+        margin: 5px 0;
+        display: block;
+    }
+</style>
+        <input type="file" id="file-input" accept=".obj,.mtl,.jpg,.jpeg,.png" multiple><br>
+        <div class="slider-container">
+            <label for="brightness-slider">亮度:</label>
+            <input type="range" id="brightness-slider" class="slider" min="0" max="200" value="100">
+            <span id="brightness-value">100%</span>
+        </div>
+        <div class="toggle-container">
+            <label for="wireframe-toggle">白模显示:</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="wireframe-toggle">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="model-controls">
+            <h3>模型列表</h3>
+            <div id="model-list"></div>
+            <button id="add-model">添加新模型</button>
+        </div>
+    </div>
+
+    <!-- 添加视口控制按钮 -->
+    <div id="viewport-controls">
+        <button class="viewport-button" id="zoom-in">+</button>
+        <button class="viewport-button" id="zoom-out">-</button>
+        <button class="viewport-button" id="move-up">↑</button>
+        <button class="viewport-button" id="move-down">↓</button>
+        <button class="viewport-button" id="reset">R</button>
+    </div>
+
+    <!-- 添加场景管理控件 -->
+    <div id="scene-controls">
+        <button id="save-scene">保存当前场景</button>
+        <div id="saved-scenes">
+            <h3>已保存的场景</h3>
+            <div id="scene-list"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script>
+        window.addEventListener('load', function() {
+            if (typeof THREE === 'undefined') {
+                console.error('THREE.js 未加载');
+                return;
+            }
+            
+            let scene, camera, renderer, controls;
+            let lights = [];
+
+            let currentModel = null; // 存储当前加载的模型
+
+            let models = []; // 存储所有加载的模型
+
+ 
+// 修改 toggleWireframe 函数
+function toggleWireframe(enabled) {
+    models.forEach(modelData => {
+        if (modelData.object) {
+            modelData.object.traverse(function(child) {
+                if (child.isMesh) {
+                    if (enabled) {
+                        // 保存原始材质
+                        child.userData.originalMaterial = child.material;
+                        // 创建灰色实体材质
+                        child.material = new THREE.MeshStandardMaterial({
+                            color: 0xcccccc,
+                            roughness: 0.7,
+                            metalness: 0.0,
+                            side: THREE.DoubleSide,
+                            flatShading: true
+                        });
+                    } else {
+                        // 恢复原始材质
+                        if (child.userData.originalMaterial) {
+                            child.material = child.userData.originalMaterial;
+                        }
+                    }
+                }
+            });
+        }
+    });
+}
+            // 添加白模切换监听器
+            document.getElementById('wireframe-toggle').addEventListener('change', function(e) {
+                toggleWireframe(e.target.checked);
+            });
+
+            function init() {
+                try {
+                    scene = new THREE.Scene();
+                    scene.background = new THREE.Color(0x2a2a2a);
+
+                    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+                    camera.position.set(0, 2, 5);
+
+                    renderer = new THREE.WebGLRenderer({ 
+                        antialias: true,
+                        precision: 'highp',
+                        alpha: true,
+                        preserveDrawingBuffer: true
+                    });
+                    renderer.setPixelRatio(window.devicePixelRatio);
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    renderer.outputEncoding = THREE.sRGBEncoding;
+                    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                    renderer.toneMappingExposure = 1.0;
+                    document.body.appendChild(renderer.domElement);
+
+                    controls = new THREE.OrbitControls(camera, renderer.domElement);
+                    controls.enableDamping = true;
+                    controls.dampingFactor = 0.05;
+                    controls.screenSpacePanning = true;
+
+                    // 重新设置光源并存储到数组中
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+                    scene.add(ambientLight);
+                    lights.push(ambientLight);
+
+                    const frontLight = new THREE.DirectionalLight(0xffffff, 0.3);
+                    frontLight.position.set(0, 0, 1);
+                    scene.add(frontLight);
+                    lights.push(frontLight);
+
+                    const topLight = new THREE.DirectionalLight(0xffffff, 0.3);
+                    topLight.position.set(0, 1, 0);
+                    scene.add(topLight);
+                    lights.push(topLight);
+
+                    // 添加亮度控制
+                    const brightnessSlider = document.getElementById('brightness-slider');
+                    const brightnessValue = document.getElementById('brightness-value');
+                    
+                    brightnessSlider.addEventListener('input', function(e) {
+                        const value = e.target.value / 100;
+                        brightnessValue.textContent = e.target.value + '%';
+                        
+                        // 调整所有光源的强度
+                        lights.forEach(light => {
+                            if (light.isAmbientLight) {
+                                light.intensity = value * 0.4; // 环境光基础强度是 0.4
+                            } else if (light.isDirectionalLight) {
+                                light.intensity = value * 0.3; // 方向光基础强度是 0.3
+                            }
+                        });
+                    });
+
+                    // 添加视口控制
+                    const zoomStep = 0.5;
+                    const moveStep = 0.5;
+
+                    document.getElementById('zoom-in').addEventListener('click', () => {
+                        camera.position.z -= zoomStep;
+                        controls.update();
+                    });
+
+                    document.getElementById('zoom-out').addEventListener('click', () => {
+                        camera.position.z += zoomStep;
+                        controls.update();
+                    });
+
+                    document.getElementById('move-up').addEventListener('click', () => {
+                        camera.position.y += moveStep;
+                        controls.target.y += moveStep;
+                        controls.update();
+                    });
+
+                    document.getElementById('move-down').addEventListener('click', () => {
+                        camera.position.y -= moveStep;
+                        controls.target.y -= moveStep;
+                        controls.update();
+                    });
+
+                    document.getElementById('reset').addEventListener('click', () => {
+                        camera.position.set(0, 2, 5);
+                        controls.target.set(0, 0, 0);
+                        controls.update();
+                    });
+
+                    // 添加键盘控制
+                    window.addEventListener('keydown', (e) => {
+                        switch(e.key) {
+                            case '=': // 放大
+                            case '+':
+                                camera.position.z -= zoomStep;
+                                break;
+                            case '-': // 缩小
+                            case '_':
+                                camera.position.z += zoomStep;
+                                break;
+                            case 'ArrowUp': // 向上移动
+                                camera.position.y += moveStep;
+                                controls.target.y += moveStep;
+                                break;
+                            case 'ArrowDown': // 向下移动
+                                camera.position.y -= moveStep;
+                                controls.target.y -= moveStep;
+                                break;
+                            case 'r': // 重置视图
+                            case 'R':
+                                camera.position.set(0, 2, 5);
+                                controls.target.set(0, 0, 0);
+                                break;
+                        }
+                        controls.update();
+                    });
+
+                    animate();
+                } catch (error) {
+                    console.error('初始化错误:', error);
+                }
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                if (controls) controls.update();
+                if (renderer && scene && camera) {
+                    renderer.render(scene, camera);
+                }
+            }
+
+            function loadOBJFile(objFile, mtlFile, textureFiles, position = { x: 0, y: 0, z: 0 }) {
+                if (mtlFile && textureFiles.length > 0) {
+                    const textureFile = textureFiles[0];
+                    const textureReader = new FileReader();
+                    
+                    textureReader.onload = function(textureEvent) {
+                        const textureDataUrl = textureEvent.target.result;
+                        const texture = new THREE.TextureLoader().load(textureDataUrl);
+                        
+                        texture.encoding = THREE.sRGBEncoding;
+                        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                        texture.minFilter = THREE.LinearFilter;
+                        texture.magFilter = THREE.LinearFilter;
+                        texture.generateMipmaps = true;
+                        
+                        const mtlReader = new FileReader();
+                        mtlReader.onload = function(mtlEvent) {
+                            const mtlContent = mtlEvent.target.result;
+                            const mtlBlob = new Blob([mtlContent], { type: 'text/plain' });
+                            const mtlURL = URL.createObjectURL(mtlBlob);
+
+                            const mtlLoader = new THREE.MTLLoader();
+                            mtlLoader.load(mtlURL, function(materials) {
+                                materials.preload();
+                                
+                                Object.values(materials.materials).forEach(material => {
+                                    material.map = texture;
+                                    material.needsUpdate = true;
+                                    material.side = THREE.DoubleSide;
+                                    material.skinning = true;
+                                    material.morphTargets = true;
+                                    material.morphNormals = true;
+                                    material.roughness = 0.5;
+                                    material.metalness = 0.5;
+                                    material.envMapIntensity = 1.0;
+                                });
+
+                                const objLoader = new THREE.OBJLoader();
+                                objLoader.setMaterials(materials);
+
+                                const objReader = new FileReader();
+                                objReader.onload = function(objEvent) {
+                                    const object = objLoader.parse(objEvent.target.result);
+                                    
+                                    // 调整模大小和位置
+                                    const box = new THREE.Box3().setFromObject(object);
+                                    const center = box.getCenter(new THREE.Vector3());
+                                    const size = box.getSize(new THREE.Vector3());
+                                    const maxDim = Math.max(size.x, size.y, size.z);
+                                    const scale = 2 / maxDim;
+                                    
+                                    object.scale.multiplyScalar(scale);
+                                    object.position.copy(center).multiplyScalar(-1 * scale);
+                                    
+                                    // 应用指定位置
+                                    object.position.x += position.x;
+                                    object.position.y += position.y;
+                                    object.position.z += position.z;
+                                    
+                                    // 将模型添加到场景和模型列表
+                                    scene.add(object);
+                                    const modelIndex = models.length;
+                                    models.push({
+                                        object: object,
+                                        position: position
+                                    });
+                                    
+                                    // 添加到UI列表
+                                    addModelToList(modelIndex);
+                                    
+                                    // 检查白模状态
+                                    const wireframeEnabled = document.getElementById('wireframe-toggle').checked;
+                                    if (wireframeEnabled) {
+                                        toggleWireframe(true);
+                                    }
+                                };
+                                objReader.readAsText(objFile);
+                            });
+                        };
+                        mtlReader.readAsText(mtlFile);
+                    };
+                    textureReader.readAsDataURL(textureFile);
+                }
+            }
+
+            // 添加模型到UI列表
+            function addModelToList(index) {
+                const modelList = document.getElementById('model-list');
+                const modelItem = document.createElement('div');
+                modelItem.className = 'model-item';
+                modelItem.innerHTML = `
+                    <span>模型 ${index + 1}</span>
+                    <label>X: <input type="number" class="pos-x" value="${models[index].position.x}" step="0.5"></label>
+                    <label>Y: <input type="number" class="pos-y" value="${models[index].position.y}" step="0.5"></label>
+                    <label>Z: <input type="number" class="pos-z" value="${models[index].position.z}" step="0.5"></label>
+                    <button class="remove-model">删除</button>
+                `;
+                
+                // 添加位置控制事件
+                const inputs = modelItem.querySelectorAll('input[type="number"]');
+                inputs.forEach(input => {
+                    input.addEventListener('change', function() {
+                        const x = parseFloat(modelItem.querySelector('.pos-x').value);
+                        const y = parseFloat(modelItem.querySelector('.pos-y').value);
+                        const z = parseFloat(modelItem.querySelector('.pos-z').value);
+                        models[index].object.position.set(x, y, z);
+                    });
+                });
+                
+                // 添加删除按钮事件
+                modelItem.querySelector('.remove-model').addEventListener('click', function() {
+                    scene.remove(models[index].object);
+                    models.splice(index, 1);
+                    updateModelList();
+                });
+                
+                modelList.appendChild(modelItem);
+            }
+
+            // 更新模型列表UI
+            function updateModelList() {
+                const modelList = document.getElementById('model-list');
+                modelList.innerHTML = '';
+                models.forEach((model, index) => {
+                    addModelToList(index);
+                });
+            }
+
+            // 添加新模型按钮事件
+            document.getElementById('add-model').addEventListener('click', function() {
+                document.getElementById('file-input').click();
+            });
+
+            // 修改文件输入监听器
+            document.getElementById('file-input').addEventListener('change', function(event) {
+                const files = Array.from(event.target.files);
+                const objFile = files.find(f => f.name.toLowerCase().endsWith('.obj'));
+                const mtlFile = files.find(f => f.name.toLowerCase().endsWith('.mtl'));
+                const textureFiles = files.filter(f => /\.(jpg|jpeg|png|gif)$/i.test(f.name));
+                
+                if (objFile) {
+                    // 计算新模型的位置
+                    const offset = models.length * 3; // 每个模型间隔3个单位
+                    loadOBJFile(objFile, mtlFile, textureFiles, { x: offset, y: 0, z: 0 });
+                }
+            });
+
+            init();
+
+            window.addEventListener('resize', function() {
+                if (camera && renderer) {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                }
+            });
+
+            // 获取场景数据
+            function getSceneData() {
+                const sceneData = {
+                    models: models.map(model => ({
+                        position: {
+                            x: model.object.position.x,
+                            y: model.object.position.y,
+                            z: model.object.position.z
+                        },
+                        rotation: {
+                            x: model.object.rotation.x,
+                            y: model.object.rotation.y,
+                            z: model.object.rotation.z
+                        },
+                        scale: {
+                            x: model.object.scale.x,
+                            y: model.object.scale.y,
+                            z: model.object.scale.z
+                        }
+                    })),
+                    camera: {
+                        position: {
+                            x: camera.position.x,
+                            y: camera.position.y,
+                            z: camera.position.z
+                        },
+                        rotation: {
+                            x: camera.rotation.x,
+                            y: camera.rotation.y,
+                            z: camera.rotation.z
+                        }
+                    },
+                    settings: {
+                        wireframe: document.getElementById('wireframe-toggle').checked,
+                        brightness: document.getElementById('brightness-slider').value
+                    }
+                };
+                return sceneData;
+            }
+
+            // 保存场景函数
+            async function saveScene() {
+                const sceneData = getSceneData();
+                try {
+                    const response = await fetch('/save-scene', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(sceneData)
+                    });
+                    
+                    const result = await response.json();
+                    if(result.success) {
+                        alert('场景保存成功！');
+                        loadSceneList(); // 刷新场景列表
+                    }
+                } catch (error) {
+                    console.error('保存失败:', error);
+                    alert('保存失败，请重试');
+                }
+            }
+
+            // 加载场景列表
+            async function loadSceneList() {
+                try {
+                    const response = await fetch('/list-scenes');
+                    const scenes = await response.json();
+                    const sceneList = document.getElementById('scene-list');
+                    sceneList.innerHTML = '';
+                    
+                    scenes.forEach(scene => {
+                        const sceneElement = document.createElement('div');
+                        sceneElement.className = 'saved-scene';
+                        sceneElement.innerHTML = `
+                            <div>${scene.filename}</div>
+                            <button onclick="loadScene('${scene.filename}')">加载</button>
+                            <button onclick="deleteScene('${scene.filename}')">删除</button>
+                        `;
+                        sceneList.appendChild(sceneElement);
+                    });
+                } catch (error) {
+                    console.error('加载场景列表失败:', error);
+                }
+            }
+
+            // 在页面加载完成后添加事件监听
+            document.getElementById('save-scene').addEventListener('click', saveScene);
+            // 初始加载场景列表
+            loadSceneList();
+        });
+    </script>
+</body>
+</html> 
