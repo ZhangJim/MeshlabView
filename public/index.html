@@ -18,6 +18,7 @@
         }
         #file-input {
             margin-bottom: 10px;
+            display: none;
         }
         .slider-container {
             display: flex;
@@ -128,6 +129,114 @@
         .model-item button:hover {
             background: #666;
         }
+        /* 场景管理样式 */
+        #scene-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 5px;
+            color: white;
+            width: 300px;
+        }
+
+        #save-scene {
+            width: 100%;
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        #save-scene:hover {
+            background: #1976D2;
+        }
+
+        .saved-scene {
+            background: rgba(255, 255, 255, 0.1);
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .saved-scene div {
+            flex: 1;
+            margin-right: 10px;
+            word-break: break-all;
+            font-size: 13px;
+        }
+
+        .saved-scene button {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 5px;
+            font-size: 12px;
+        }
+
+        .saved-scene button:hover {
+            background: #666;
+        }
+
+        .saved-scene button:last-child {
+            background: #d32f2f;
+        }
+
+        .saved-scene button:last-child:hover {
+            background: #b71c1c;
+        }
+
+        #scene-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        #scene-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #scene-list::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        #scene-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        .model-controls h3 {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        
+        .add-model-btn {
+            display: inline-block;
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        
+        .add-model-btn:hover {
+            background: #1976D2;
+        }
     </style>
 </head>
 <body>
@@ -174,8 +283,8 @@
         </div>
         <div class="model-controls">
             <h3>模型列表</h3>
+            <button id="add-model" class="add-model-btn">添加新模型</button>
             <div id="model-list"></div>
-            <button id="add-model">添加新模型</button>
         </div>
     </div>
 
@@ -188,21 +297,186 @@
         <button class="viewport-button" id="reset">R</button>
     </div>
 
-    <!-- 添加场景管理控件 -->
-    <div id="scene-controls">
-        <button id="save-scene">保存当前场景</button>
-        <div id="saved-scenes">
-            <h3>已保存的场景</h3>
-            <div id="scene-list"></div>
-        </div>
-    </div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script>
+        // 在 script 标签开始处添加 toast 函数
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            // 添加显示动画
+            setTimeout(() => toast.classList.add('show'), 100);
+            
+            // 3秒移除
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 3000);
+            }, 3000);
+        }
+
+        // 添加对应的样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .toast {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 24px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                border-radius: 4px;
+                z-index: 1000;
+                opacity: 0;
+                transform: translateY(-20px);
+                transition: all 0.3s ease;
+            }
+            .toast.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            .toast-success {
+                background: rgba(76, 175, 80, 0.9);
+            }
+            .toast-error {
+                background: rgba(244, 67, 54, 0.9);
+            }
+        `;
+        document.head.appendChild(style);
+
+        // 添加确认弹层的样式
+        const confirmStyle = document.createElement('style');
+        confirmStyle.textContent = `
+            .confirm-dialog {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: #2a2a2a;
+                padding: 20px;
+                border-radius: 8px;
+                color: white;
+                z-index: 1000;
+                min-width: 300px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            }
+            .confirm-dialog h3 {
+                margin: 0 0 15px 0;
+                font-size: 16px;
+            }
+            .confirm-dialog .buttons {
+                display: flex;
+                justify-content: flex-end;
+                gap: 10px;
+                margin-top: 20px;
+            }
+            .confirm-dialog button {
+                padding: 8px 15px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .confirm-dialog .confirm-btn {
+                background: #d32f2f;
+                color: white;
+            }
+            .confirm-dialog .cancel-btn {
+                background: #666;
+                color: white;
+            }
+            .confirm-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 999;
+            }
+        `;
+        document.head.appendChild(confirmStyle);
+
+        // 添加确认对话框函数
+        function showConfirmDialog(message) {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'confirm-overlay';
+                
+                const dialog = document.createElement('div');
+                dialog.className = 'confirm-dialog';
+                dialog.innerHTML = `
+                    <h3>确认删除</h3>
+                    <p>${message}</p>
+                    <div class="buttons">
+                        <button class="cancel-btn">取消</button>
+                        <button class="confirm-btn">确认删除</button>
+                    </div>
+                `;
+                
+                document.body.appendChild(overlay);
+                document.body.appendChild(dialog);
+                
+                dialog.querySelector('.confirm-btn').addEventListener('click', () => {
+                    overlay.remove();
+                    dialog.remove();
+                    resolve(true);
+                });
+                
+                dialog.querySelector('.cancel-btn').addEventListener('click', () => {
+                    overlay.remove();
+                    dialog.remove();
+                    resolve(false);
+                });
+            });
+        }
+
+        // 在 window.addEventListener('load', function() { 之前添加全局函数
+        window.deleteScene = async function(filename) {
+            try {
+                // 显示确认对话框
+                const confirmed = await showConfirmDialog('确定要删除这个场景吗？');
+                if (!confirmed) return;
+                
+                const response = await fetch(`/scenes/${filename}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    // 获取最新的场景列表
+                    const listResponse = await fetch('/list-scenes');
+                    const scenes = await listResponse.json();
+                    
+                    // 更新场景列表UI
+                    const sceneList = document.getElementById('scene-list');
+                    sceneList.innerHTML = '';
+                    
+                    scenes.forEach(scene => {
+                        const sceneElement = document.createElement('div');
+                        sceneElement.className = 'saved-scene';
+                        sceneElement.innerHTML = `
+                            <div>${scene.filename}</div>
+                            <button onclick="loadScene('${scene.filename}')">加载</button>
+                            <button onclick="deleteScene('${scene.filename}')">删除</button>
+                        `;
+                        sceneList.appendChild(sceneElement);
+                    });
+                    
+                    showToast('景删除成功', 'success');
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || '删除失败');
+                }
+            } catch (error) {
+                console.error('删除场景失败:', error);
+                showToast('删除场景失败: ' + error.message, 'error');
+            }
+        };
+
         window.addEventListener('load', function() {
             if (typeof THREE === 'undefined') {
                 console.error('THREE.js 未加载');
@@ -211,51 +485,20 @@
             
             let scene, camera, renderer, controls;
             let lights = [];
-
-            let currentModel = null; // 存储当前加载的模型
-
-            let models = []; // 存储所有加载的模型
-
- 
-// 修改 toggleWireframe 函数
-function toggleWireframe(enabled) {
-    models.forEach(modelData => {
-        if (modelData.object) {
-            modelData.object.traverse(function(child) {
-                if (child.isMesh) {
-                    if (enabled) {
-                        // 保存原始材质
-                        child.userData.originalMaterial = child.material;
-                        // 创建灰色实体材质
-                        child.material = new THREE.MeshStandardMaterial({
-                            color: 0xcccccc,
-                            roughness: 0.7,
-                            metalness: 0.0,
-                            side: THREE.DoubleSide,
-                            flatShading: true
-                        });
-                    } else {
-                        // 恢复原始材质
-                        if (child.userData.originalMaterial) {
-                            child.material = child.userData.originalMaterial;
-                        }
-                    }
-                }
-            });
-        }
-    });
-}
-            // 添加白模切换监听器
-            document.getElementById('wireframe-toggle').addEventListener('change', function(e) {
-                toggleWireframe(e.target.checked);
-            });
+            let currentModel = null;
+            window.models = []; // 改为全局变量
+            window.scene = null; // 添加全局场景引用
+            window.camera = null; // 添加全局相机引用
+            window.controls = null; // 添加全局控制器引用
 
             function init() {
                 try {
                     scene = new THREE.Scene();
+                    window.scene = scene; // 保存全局引用
                     scene.background = new THREE.Color(0x2a2a2a);
 
                     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+                    window.camera = camera; // 保存全局引用
                     camera.position.set(0, 2, 5);
 
                     renderer = new THREE.WebGLRenderer({ 
@@ -272,6 +515,7 @@ function toggleWireframe(enabled) {
                     document.body.appendChild(renderer.domElement);
 
                     controls = new THREE.OrbitControls(camera, renderer.domElement);
+                    window.controls = controls; // 保存全局引用
                     controls.enableDamping = true;
                     controls.dampingFactor = 0.05;
                     controls.screenSpacePanning = true;
@@ -291,7 +535,7 @@ function toggleWireframe(enabled) {
                     scene.add(topLight);
                     lights.push(topLight);
 
-                    // 添加亮度控制
+                    // 加亮度控制
                     const brightnessSlider = document.getElementById('brightness-slider');
                     const brightnessValue = document.getElementById('brightness-value');
                     
@@ -344,7 +588,7 @@ function toggleWireframe(enabled) {
                     // 添加键盘控制
                     window.addEventListener('keydown', (e) => {
                         switch(e.key) {
-                            case '=': // 放大
+                            case '=': // 大
                             case '+':
                                 camera.position.z -= zoomStep;
                                 break;
@@ -386,85 +630,152 @@ function toggleWireframe(enabled) {
             function loadOBJFile(objFile, mtlFile, textureFiles, position = { x: 0, y: 0, z: 0 }) {
                 if (mtlFile && textureFiles.length > 0) {
                     const textureFile = textureFiles[0];
-                    const textureReader = new FileReader();
                     
-                    textureReader.onload = function(textureEvent) {
-                        const textureDataUrl = textureEvent.target.result;
-                        const texture = new THREE.TextureLoader().load(textureDataUrl);
-                        
+                    // 首先上传文件
+                    const uploadFiles = async () => {
+                        try {
+                            console.log("开始上传文件");
+                            
+                            // 上传OBJ文件
+                            const objFormData = new FormData();
+                            objFormData.append('file', objFile);
+                            console.log("上传OBJ文件:", objFile.name);
+                            
+                            const objResponse = await fetch('/upload', {
+                                method: 'POST',
+                                body: objFormData
+                            });
+                            
+                            if (!objResponse.ok) {
+                                const errorText = await objResponse.text();
+                                console.error("OBJ文件上传失败:", errorText);
+                                throw new Error(`OBJ文件上传失败: ${errorText}`);
+                            }
+                            
+                            const objResult = await objResponse.json();
+                            console.log("OBJ文件上传成功:", objResult);
+                            
+                            // 上传MTL文件
+                            const mtlFormData = new FormData();
+                            mtlFormData.append('file', mtlFile);
+                            console.log("上传MTL文件:", mtlFile.name);
+                            
+                            const mtlResponse = await fetch('/upload', {
+                                method: 'POST',
+                                body: mtlFormData
+                            });
+                            
+                            if (!mtlResponse.ok) {
+                                const errorText = await mtlResponse.text();
+                                console.error("MTL文件上传失败:", errorText);
+                                throw new Error(`MTL文件上传失败: ${errorText}`);
+                            }
+                            
+                            const mtlResult = await mtlResponse.json();
+                            console.log("MTL文件上传成功:", mtlResult);
+                            
+                            // 上传贴图文件
+                            const textureFormData = new FormData();
+                            textureFormData.append('file', textureFile);
+                            console.log("上传贴图文件:", textureFile.name);
+                            
+                            const textureResponse = await fetch('/upload', {
+                                method: 'POST',
+                                body: textureFormData
+                            });
+                            
+                            if (!textureResponse.ok) {
+                                const errorText = await textureResponse.text();
+                                console.error("贴图文件上传失败:", errorText);
+                                throw new Error(`贴图文件上传失败: ${errorText}`);
+                            }
+                            
+                            const textureResult = await textureResponse.json();
+                            console.log("贴图文件上传成功:", textureResult);
+                            
+                            return {
+                                objPath: objResult.filepath,
+                                mtlPath: mtlResult.filepath,
+                                texturePath: textureResult.filepath,
+                                files: {
+                                    obj: objFile,
+                                    mtl: mtlFile,
+                                    texture: textureFile
+                                }
+                            };
+                        } catch (error) {
+                            console.error('文件上传失败:', error);
+                            throw error;
+                        }
+                    };
+                    
+                    // 上传文件并加载模型
+                    uploadFiles().then(paths => {
+                        const texture = new THREE.TextureLoader().load(paths.texturePath);
                         texture.encoding = THREE.sRGBEncoding;
                         texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                        texture.minFilter = THREE.LinearFilter;
-                        texture.magFilter = THREE.LinearFilter;
-                        texture.generateMipmaps = true;
                         
-                        const mtlReader = new FileReader();
-                        mtlReader.onload = function(mtlEvent) {
-                            const mtlContent = mtlEvent.target.result;
-                            const mtlBlob = new Blob([mtlContent], { type: 'text/plain' });
-                            const mtlURL = URL.createObjectURL(mtlBlob);
-
-                            const mtlLoader = new THREE.MTLLoader();
-                            mtlLoader.load(mtlURL, function(materials) {
-                                materials.preload();
-                                
-                                Object.values(materials.materials).forEach(material => {
-                                    material.map = texture;
-                                    material.needsUpdate = true;
-                                    material.side = THREE.DoubleSide;
-                                    material.skinning = true;
-                                    material.morphTargets = true;
-                                    material.morphNormals = true;
-                                    material.roughness = 0.5;
-                                    material.metalness = 0.5;
-                                    material.envMapIntensity = 1.0;
-                                });
-
-                                const objLoader = new THREE.OBJLoader();
-                                objLoader.setMaterials(materials);
-
-                                const objReader = new FileReader();
-                                objReader.onload = function(objEvent) {
-                                    const object = objLoader.parse(objEvent.target.result);
-                                    
-                                    // 调整模大小和位置
-                                    const box = new THREE.Box3().setFromObject(object);
-                                    const center = box.getCenter(new THREE.Vector3());
-                                    const size = box.getSize(new THREE.Vector3());
-                                    const maxDim = Math.max(size.x, size.y, size.z);
-                                    const scale = 2 / maxDim;
-                                    
-                                    object.scale.multiplyScalar(scale);
-                                    object.position.copy(center).multiplyScalar(-1 * scale);
-                                    
-                                    // 应用指定位置
-                                    object.position.x += position.x;
-                                    object.position.y += position.y;
-                                    object.position.z += position.z;
-                                    
-                                    // 将模型添加到场景和模型列表
-                                    scene.add(object);
-                                    const modelIndex = models.length;
-                                    models.push({
-                                        object: object,
-                                        position: position
-                                    });
-                                    
-                                    // 添加到UI列表
-                                    addModelToList(modelIndex);
-                                    
-                                    // 检查白模状态
-                                    const wireframeEnabled = document.getElementById('wireframe-toggle').checked;
-                                    if (wireframeEnabled) {
-                                        toggleWireframe(true);
-                                    }
-                                };
-                                objReader.readAsText(objFile);
+                        const mtlLoader = new THREE.MTLLoader();
+                        mtlLoader.load(paths.mtlPath, function(materials) {
+                            materials.preload();
+                            
+                            Object.values(materials.materials).forEach(material => {
+                                material.map = texture;
+                                material.needsUpdate = true;
                             });
-                        };
-                        mtlReader.readAsText(mtlFile);
-                    };
-                    textureReader.readAsDataURL(textureFile);
+                            
+                            const objLoader = new THREE.OBJLoader();
+                            objLoader.setMaterials(materials);
+                            
+                            objLoader.load(paths.objPath, function(object) {
+                                // 调整模大小和位置
+                                const box = new THREE.Box3().setFromObject(object);
+                                const center = box.getCenter(new THREE.Vector3());
+                                const size = box.getSize(new THREE.Vector3());
+                                const maxDim = Math.max(size.x, size.y, size.z);
+                                const scale = 2 / maxDim;
+                                
+                                object.scale.multiplyScalar(scale);
+                                object.position.copy(center).multiplyScalar(-1 * scale);
+                                
+                                // 应用指定位置
+                                object.position.x += position.x;
+                                object.position.y += position.y;
+                                object.position.z += position.z;
+                                
+                                // 将模型添加到场景和模型列表
+                                scene.add(object);
+                                const modelIndex = models.length;
+                                models.push({
+                                    object: object,
+                                    position: position,
+                                    files: paths.files,
+                                    savedFiles: {
+                                        objFile: paths.objPath,
+                                        mtlFile: paths.mtlPath,
+                                        textureFile: paths.texturePath
+                                    }
+                                });
+                                
+                                // 添加到UI列表
+                                addModelToList(modelIndex);
+                                
+                                // 检查白模状态
+                                const wireframeEnabled = document.getElementById('wireframe-toggle').checked;
+                                if (wireframeEnabled) {
+                                    toggleWireframe(true);
+                                }
+                                
+                                // 清理 URL
+                                URL.revokeObjectURL(paths.texturePath);
+                                URL.revokeObjectURL(paths.mtlPath);
+                                URL.revokeObjectURL(paths.objPath);
+                            });
+                        });
+                    }).catch(error => {
+                        console.error('模型加载失败:', error);
+                        alert('模型加载失败: ' + error.message);
+                    });
                 }
             }
 
@@ -481,7 +792,7 @@ function toggleWireframe(enabled) {
                     <button class="remove-model">删除</button>
                 `;
                 
-                // 添加位置控制事件
+                // 添加位置控事件
                 const inputs = modelItem.querySelectorAll('input[type="number"]');
                 inputs.forEach(input => {
                     input.addEventListener('change', function() {
@@ -502,7 +813,7 @@ function toggleWireframe(enabled) {
                 modelList.appendChild(modelItem);
             }
 
-            // 更新模型列表UI
+            // 更新模列表UI
             function updateModelList() {
                 const modelList = document.getElementById('model-list');
                 modelList.innerHTML = '';
@@ -524,8 +835,8 @@ function toggleWireframe(enabled) {
                 const textureFiles = files.filter(f => /\.(jpg|jpeg|png|gif)$/i.test(f.name));
                 
                 if (objFile) {
-                    // 计算新模型的位置
-                    const offset = models.length * 3; // 每个模型间隔3个单位
+                    // 修改新模型的位置计算
+                    const offset = models.length * 0.5; // 减小间距为0.5个单位
                     loadOBJFile(objFile, mtlFile, textureFiles, { x: offset, y: 0, z: 0 });
                 }
             });
@@ -540,7 +851,7 @@ function toggleWireframe(enabled) {
                 }
             });
 
-            // 获取场景数据
+            // 获取景数据
             function getSceneData() {
                 const sceneData = {
                     models: models.map(model => ({
@@ -580,10 +891,52 @@ function toggleWireframe(enabled) {
                 return sceneData;
             }
 
-            // 保存场景函数
+            // 修改保存场景函数
             async function saveScene() {
-                const sceneData = getSceneData();
                 try {
+                    // 准备场景数据
+                    const sceneData = {
+                        models: models.map(model => ({
+                            // 使用完整的文件路径
+                            objFile: model.savedFiles.objFile,      // 包含完整路径
+                            mtlFile: model.savedFiles.mtlFile,      // 包含完整路径
+                            textureFile: model.savedFiles.textureFile,  // 包含完整路径
+                            position: {
+                                x: model.object.position.x,
+                                y: model.object.position.y,
+                                z: model.object.position.z
+                            },
+                            rotation: {
+                                x: model.object.rotation.x,
+                                y: model.object.rotation.y,
+                                z: model.object.rotation.z
+                            },
+                            scale: {
+                                x: model.object.scale.x,
+                                y: model.object.scale.y,
+                                z: model.object.scale.z
+                            }
+                        })),
+                        camera: {
+                            position: {
+                                x: camera.position.x,
+                                y: camera.position.y,
+                                z: camera.position.z
+                            },
+                            rotation: {
+                                x: camera.rotation.x,
+                                y: camera.rotation.y,
+                                z: camera.rotation.z
+                            }
+                        },
+                        settings: {
+                            wireframe: document.getElementById('wireframe-toggle').checked,
+                            brightness: document.getElementById('brightness-slider').value
+                        }
+                    };
+
+                    console.log('Saving scene data:', sceneData); // 添加日志
+
                     const response = await fetch('/save-scene', {
                         method: 'POST',
                         headers: {
@@ -594,16 +947,18 @@ function toggleWireframe(enabled) {
                     
                     const result = await response.json();
                     if(result.success) {
-                        alert('场景保存成功！');
-                        loadSceneList(); // 刷新场景列表
+                        showToast('场景保存成功', 'success');
+                        loadSceneList();
+                    } else {
+                        throw new Error(result.error || '保存失败');
                     }
                 } catch (error) {
                     console.error('保存失败:', error);
-                    alert('保存失败，请重试');
+                    showToast('保存失败: ' + error.message, 'error');
                 }
             }
 
-            // 加载场景列表
+            // 修改 loadSceneList 函数
             async function loadSceneList() {
                 try {
                     const response = await fetch('/list-scenes');
@@ -614,15 +969,85 @@ function toggleWireframe(enabled) {
                     scenes.forEach(scene => {
                         const sceneElement = document.createElement('div');
                         sceneElement.className = 'saved-scene';
-                        sceneElement.innerHTML = `
-                            <div>${scene.filename}</div>
+                        
+                        // 创建文件名容器，移除 .json 后缀
+                        const nameSpan = document.createElement('span');
+                        nameSpan.className = 'scene-name';
+                        nameSpan.textContent = scene.filename.replace('.json', '');  // 移除 .json 后缀
+                        nameSpan.title = '双击重命名';
+                        
+                        // 添加双击事件监听器
+                        nameSpan.addEventListener('dblclick', async function(e) {
+                            const oldName = scene.filename;
+                            const input = document.createElement('input');
+                            input.type = 'text';
+                            input.value = oldName.replace('.json', '');
+                            input.className = 'rename-input';
+                            
+                            // 替换原有的文本为输入框
+                            this.replaceWith(input);
+                            input.focus();
+                            input.select();
+                            
+                            // 处理输入完成
+                            const handleRename = async () => {
+                                let newName = input.value.trim();
+                                if (newName && newName !== oldName.replace('.json', '')) {
+                                    try {
+                                        const response = await fetch(`/scenes/${oldName}/rename`, {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({ newName: newName })
+                                        });
+                                        
+                                        const result = await response.json();
+                                        
+                                        if (response.ok && result.success) {
+                                            showToast('重命名成功', 'success');
+                                            await loadSceneList(); // 刷新列表
+                                            return; // 成功后直接返回，不执行后面的代码
+                                        }
+                                        
+                                        // 如果到这里，说明重命名失败
+                                        throw new Error(result.error || '重命名失败');
+                                    } catch (error) {
+                                        console.error('重命名失败:', error);
+                                        showToast('重命名失败: ' + error.message, 'error');
+                                        input.replaceWith(nameSpan); // 恢复原来的名字
+                                    }
+                                } else {
+                                    // 如果名字没有改变，直接恢复原来的名字，不显示任何提示
+                                    input.replaceWith(nameSpan);
+                                }
+                            };
+                            
+                            // 添加事件监听
+                            input.addEventListener('blur', handleRename);
+                            input.addEventListener('keypress', function(e) {
+                                if (e.key === 'Enter') {
+                                    handleRename();
+                                }
+                            });
+                        });
+                        
+                        // 创建按钮容器
+                        const buttonsDiv = document.createElement('div');
+                        buttonsDiv.className = 'scene-buttons';
+                        buttonsDiv.innerHTML = `
                             <button onclick="loadScene('${scene.filename}')">加载</button>
                             <button onclick="deleteScene('${scene.filename}')">删除</button>
                         `;
+                        
+                        // 组装元素
+                        sceneElement.appendChild(nameSpan);
+                        sceneElement.appendChild(buttonsDiv);
                         sceneList.appendChild(sceneElement);
                     });
                 } catch (error) {
                     console.error('加载场景列表失败:', error);
+                    showToast('加载场景列表失败', 'error');
                 }
             }
 
@@ -630,6 +1055,227 @@ function toggleWireframe(enabled) {
             document.getElementById('save-scene').addEventListener('click', saveScene);
             // 初始加载场景列表
             loadSceneList();
+
+            // 在这里定义 window.loadScene
+            window.loadScene = async function(filename) {
+                try {
+                    const response = await fetch(`/scenes/${filename}`);
+                    const sceneData = await response.json();
+                    
+                    console.log('Loading scene data:', sceneData);
+                    
+                    // 清除当前场景中的所有模型
+                    window.models.forEach(model => {
+                        if (model.object) {
+                            window.scene.remove(model.object);
+                        }
+                    });
+                    window.models = [];
+                    
+                    // 加载模型文件
+                    if (Array.isArray(sceneData.models)) {
+                        for (const modelData of sceneData.models) {
+                            try {
+                                const objPath = modelData.objFile;
+                                const mtlPath = modelData.mtlFile;
+                                const texturePath = modelData.textureFile;
+                                
+                                console.log('Loading model files:', {objPath, mtlPath, texturePath});
+                                
+                                // 从服务器获取模型文件
+                                const objResponse = await fetch(objPath);
+                                const mtlResponse = await fetch(mtlPath);
+                                const textureResponse = await fetch(texturePath);
+                                
+                                if (!objResponse.ok || !mtlResponse.ok || !textureResponse.ok) {
+                                    throw new Error('无法加载模型文件');
+                                }
+                                
+                                const objBlob = await objResponse.blob();
+                                const mtlBlob = await mtlResponse.blob();
+                                const textureBlob = await textureResponse.blob();
+                                
+                                // 创建文件的 URL
+                                const objUrl = URL.createObjectURL(objBlob);
+                                const mtlUrl = URL.createObjectURL(mtlBlob);
+                                const textureUrl = URL.createObjectURL(textureBlob);
+                                
+                                // 先加载纹理
+                                const texture = await new Promise((resolve, reject) => {
+                                    const textureLoader = new THREE.TextureLoader();
+                                    textureLoader.load(
+                                        textureUrl,
+                                        (texture) => {
+                                            texture.encoding = THREE.sRGBEncoding;
+                                            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                            resolve(texture);
+                                        },
+                                        undefined,
+                                        reject
+                                    );
+                                });
+                                
+                                // 加载材质和模型
+                                await new Promise((resolve, reject) => {
+                                    const mtlLoader = new THREE.MTLLoader();
+                                    mtlLoader.load(mtlUrl, (materials) => {
+                                        materials.preload();
+                                        
+                                        // 应用纹理到所有材质
+                                        Object.values(materials.materials).forEach(material => {
+                                            material.map = texture;
+                                            material.needsUpdate = true;
+                                        });
+                                        
+                                        const objLoader = new THREE.OBJLoader();
+                                        objLoader.setMaterials(materials);
+                                        
+                                        objLoader.load(objUrl, (object) => {
+                                            // 应用保存的变换
+                                            object.position.set(
+                                                modelData.position.x,
+                                                modelData.position.y,
+                                                modelData.position.z
+                                            );
+                                            object.rotation.set(
+                                                modelData.rotation.x,
+                                                modelData.rotation.y,
+                                                modelData.rotation.z
+                                            );
+                                            object.scale.set(
+                                                modelData.scale.x,
+                                                modelData.scale.y,
+                                                modelData.scale.z
+                                            );
+                                            
+                                            // 添加到场景
+                                            window.scene.add(object);
+                                            
+                                            // 保存到模型列表
+                                            window.models.push({
+                                                object: object,
+                                                position: modelData.position,
+                                                savedFiles: {
+                                                    objFile: objPath,
+                                                    mtlFile: mtlPath,
+                                                    textureFile: texturePath
+                                                }
+                                            });
+                                            
+                                            // 清理URL
+                                            URL.revokeObjectURL(objUrl);
+                                            URL.revokeObjectURL(mtlUrl);
+                                            URL.revokeObjectURL(textureUrl);
+                                            
+                                            // 更新UI
+                                            updateModelList();
+                                            
+                                            resolve();
+                                        }, undefined, reject);
+                                    }, undefined, reject);
+                                });
+                                
+                            } catch (error) {
+                                console.error('加载模型失败:', error);
+                                showToast('加载模型失败: ' + error.message, 'error');
+                            }
+                        }
+                    }
+                    
+                    // 应用场景设置
+                    if (sceneData.settings) {
+                        document.getElementById('wireframe-toggle').checked = sceneData.settings.wireframe;
+                        document.getElementById('brightness-slider').value = sceneData.settings.brightness;
+                        const event = new Event('input');
+                        document.getElementById('brightness-slider').dispatchEvent(event);
+                    }
+                    
+                    // 加载相机位置
+                    if (sceneData.camera) {
+                        camera.position.set(
+                            sceneData.camera.position.x,
+                            sceneData.camera.position.y,
+                            sceneData.camera.position.z
+                        );
+                        camera.rotation.set(
+                            sceneData.camera.rotation.x,
+                            sceneData.camera.rotation.y,
+                            sceneData.camera.rotation.z
+                        );
+                        controls.update();
+                    }
+                    
+                    showToast('场景加载成功', 'success');
+                } catch (error) {
+                    console.error('加载场景失败:', error);
+                    showToast('加载场景失败: ' + error.message, 'error');
+                }
+            };
+
+            // 确保在页面加载时调用
+            loadSceneList();
+
+            // 在 window.addEventListener('load', function() { 内添加 toggleWireframe 函数
+            function toggleWireframe(enabled) {
+                models.forEach(modelData => {
+                    if (modelData.object) {
+                        modelData.object.traverse(function(child) {
+                            if (child.isMesh) {
+                                if (enabled) {
+                                    // 保存原始材质
+                                    if (!child.userData.originalMaterial) {
+                                        child.userData.originalMaterial = child.material;
+                                    }
+                                    // 创建白模材质
+                                    child.material = new THREE.MeshStandardMaterial({
+                                        color: 0xcccccc,
+                                        roughness: 0.7,
+                                        metalness: 0.0,
+                                        wireframe: false,
+                                        side: THREE.DoubleSide
+                                    });
+                                } else {
+                                    // 恢复原始材质
+                                    if (child.userData.originalMaterial) {
+                                        child.material = child.userData.originalMaterial;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+
+            // 添加白模切换监听器
+            document.getElementById('wireframe-toggle').addEventListener('change', function(e) {
+                toggleWireframe(e.target.checked);
+            });
+
+            // 添加样式
+            const style = document.createElement('style');
+            style.textContent += `
+                .scene-name {
+                    cursor: pointer;
+                    padding: 2px 5px;
+                    border-radius: 3px;
+                }
+                .scene-name:hover {
+                    background: rgba(255,255,255,0.1);
+                }
+                .rename-input {
+                    background: #333;
+                    border: 1px solid #555;
+                    color: white;
+                    padding: 2px 5px;
+                    border-radius: 3px;
+                    width: 200px;
+                }
+                .scene-buttons {
+                    display: flex;
+                    gap: 5px;
+                }
+            `;
+            document.head.appendChild(style);
         });
     </script>
 </body>
