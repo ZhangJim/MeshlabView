@@ -125,6 +125,7 @@
             padding: 10px;
             border-radius: 5px;
             display: flex;
+            flex-direction: row;
             gap: 5px;
         }
         
@@ -576,7 +577,7 @@
                 // 立即显示成功提示
                 showToast('场景删除成功', 'success');
                 
-                // 直接��取最新的场景列表并更新UI
+                // 直接取最新的场景列表并更新UI
                 const response = await fetch('/list-scenes');
                 const scenes = await response.json();
                 
@@ -1323,7 +1324,7 @@
                 }
             };
 
-            // 确保在���面加载时调用
+            // 确保在面加载时调用
             loadSceneList();
 
             // 在 window.addEventListener('load', function() { 内添加 toggleWireframe 函数
@@ -1444,10 +1445,39 @@
                     sceneControls.style.display = 'none';
                 }
                 
-                // 保留视图控制按钮
+                // 修改视口控制按钮的布局
                 const viewportControls = document.getElementById('viewport-controls');
                 if (viewportControls) {
-                    viewportControls.style.display = 'block';
+                    viewportControls.style.cssText = `
+                        position: fixed;
+                        right: 20px;
+                        bottom: 20px;
+                        z-index: 100;
+                        background: rgba(0,0,0,0.7);
+                        padding: 10px;
+                        border-radius: 5px;
+                        display: flex;
+                        flex-direction: row;
+                        gap: 5px;
+                    `;
+
+                    // 确保所有按钮都显示在同一行
+                    const buttons = viewportControls.querySelectorAll('.viewport-button');
+                    buttons.forEach(button => {
+                        button.style.cssText = `
+                            width: 40px;
+                            height: 40px;
+                            background: #444;
+                            border: none;
+                            color: white;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 16px;
+                        `;
+                    });
                 }
             } else {
                 // 设置默认标题
