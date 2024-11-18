@@ -3,6 +3,80 @@
 <head>
     <meta charset="utf-8">
     <title>OBJ 模型查看器</title>
+    <!-- 使用说明的样式 -->
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        .help-icon {
+            width: 20px;
+            height: 20px;
+            background: #2196F3;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-left: auto;
+        }
+        .help-tooltip {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: calc(100% + 10px); /* 向右偏移 */
+            transform: translateY(-50%); /* 垂直居中 */
+            width: 300px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 13px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .help-tooltip h3 {
+            margin: 0 0 10px 0;
+            font-size: 15px;
+            color: #2196F3;
+        }
+        .help-tooltip p {
+            margin: 8px 0;
+        }
+        .help-tooltip ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        .help-tooltip li {
+            margin: 5px 0;
+        }
+        .help-icon:hover + .help-tooltip {
+            display: block;
+        }
+        .help-tooltip:before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: -6px; /* 箭头位置调整到左侧 */
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-right: 6px solid rgba(0, 0, 0, 0.9); /* 箭头指向左侧 */
+        }
+    </style>
     <style>
         body { margin: 0; }
         canvas { display: block; }
@@ -52,6 +126,7 @@
             background: #666;
         }
         .toggle-container {
+            position: relative;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -240,10 +315,12 @@
     </style>
 </head>
 <body>
+   
+    
     <div id="controls">
         <!-- 在 controls div 中添加 -->
 <div class="scene-controls">
-    <button id="save-scene">保存场景</button>
+    <button id="save-scene">保存对比场景</button>
     <div id="saved-scenes">
         <div id="scene-list"></div>
     </div>
@@ -280,10 +357,31 @@
                 <input type="checkbox" id="wireframe-toggle">
                 <span class="toggle-slider"></span>
             </label>
+            <div class="help-icon" >?</div>
+            <div class="help-tooltip">
+                <h3>功能说明</h3>
+                <p>介绍：用于展示模型对比效果，可以上传彦博生成的多份模型，然后调整位置，进行对比头部模型</p>
+                <p>1. 添加模型：点击"添加新模型"按钮上传模型文件（支持.obj/.mtl/.jpg），需要上传彦博生成的模型中的这三种文件；如果想要对比多个模型，可以上传多个彦博生成的模型包</p>
+                <p>2. 调整位置：通过模型列表中的X/Y/Z坐标调整模型位置；点住鼠标右键可以拖动整体画布</p>
+                <p style="color: #ff0000;">3. 一次对比后，如果想要重新对比其他模型，需要手动刷新页面再次添加模型</p>
+                <p>4. 场景管理：</p>
+                <ul>
+                    <li>保存对比场景：如果想要以后也查看这次对比，可以点击"保存对比场景"按钮</li>
+                    <li>加载对比场景：点击场景列表中的"加载"按钮，加载历史对比内容</li>
+                    <li>重命名：双击场景名称可以重命名，点击回车进行保存</li>
+                    <li>删除对比场景：点击场景列表中的"删除"按钮</li>
+                </ul>
+                <p>4. 视图控制：</p>
+                <ul>
+                    <li>亮度调节：使用亮度滑块调整场景亮度</li>
+                    <li>白模显示切换开关显示白模效果</li>
+                    <li>滑轮控制：使用滑轮控制模型缩放</li>
+                </ul>
+            </div>
         </div>
         <div class="model-controls">
             <h3>模型列表</h3>
-            <button id="add-model" class="add-model-btn">添加新模型</button>
+            <button id="add-model" class="add-model-btn">添加模型</button>
             <div id="model-list"></div>
         </div>
     </div>
@@ -894,7 +992,7 @@
             // 修改保存场景函数
             async function saveScene() {
                 try {
-                    // 准备场景数据
+                    // 准��场景数据
                     const sceneData = {
                         models: models.map(model => ({
                             // 使用完整的文件路径
