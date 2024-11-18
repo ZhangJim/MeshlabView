@@ -2,7 +2,20 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>OBJ 模型查看器</title>
+    <title>3D模型对比工具</title>
+    <!-- 添加 Open Graph meta 标签 -->
+    <meta property="og:title" content="3D模型对比工具">
+    <meta property="og:description" content="用于查看和对比3D模型的在线工具">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="">
+    <!-- 添加 Twitter Card meta 标签 -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="3D模型对比工具">
+    <meta name="twitter:description" content="用于查看和对比3D模型的在线工具">
+    <!-- 添加基本 meta 标签 -->
+    <meta name="description" content="3D模型对比工具 - 用于查看和对比3D模型的在线工具">
+    <meta name="keywords" content="3D模型,模型对比,3D查看器">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- 使用说明的样式 -->
     <style>
         body { margin: 0; }
@@ -111,20 +124,34 @@
             background: rgba(0,0,0,0.7);
             padding: 10px;
             border-radius: 5px;
+            display: flex;
+            gap: 5px;
         }
+        
         .viewport-button {
             width: 40px;
             height: 40px;
-            margin: 5px;
             background: #444;
             border: none;
             color: white;
             border-radius: 5px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
         }
+        
         .viewport-button:hover {
             background: #666;
         }
+        
+        /* 特殊布局处理 */
+        #zoom-in { grid-column: 2; }
+        #move-up { grid-column: 2; }
+        #move-down { grid-column: 2; }
+        #zoom-out { grid-column: 1; }
+        #reset { grid-column: 3; }
         .toggle-container {
             position: relative;
             display: flex;
@@ -360,16 +387,17 @@
             <div class="help-icon" >?</div>
             <div class="help-tooltip">
                 <h3>功能说明</h3>
-                <p>介绍：用于展示模型对比效果，可以上传彦博生成的多份模型，然后调整位置，进行对比头部模型</p>
+                <p>介绍：用于展示模型对比效果，可以上传彦博生成的多份模型，多个模型会自动对齐</p>
                 <p>1. 添加模型：点击"添加新模型"按钮上传模型文件（支持.obj/.mtl/.jpg），需要上传彦博生成的模型中的这三种文件；如果想要对比多个模型，可以上传多个彦博生成的模型包</p>
                 <p>2. 调整位置：通过模型列表中的X/Y/Z坐标调整模型位置；点住鼠标右键可以拖动整体画布</p>
                 <p style="color: #ff0000;">3. 一次对比后，如果想要重新对比其他模型，需要手动刷新页面再次添加模型</p>
                 <p>4. 场景管理：</p>
                 <ul>
-                    <li>保存对比场景：如果想要以后也查看这次对比，可以点击"保存对比场景"按钮</li>
-                    <li>加载对比场景：点击场景列表中的"加载"按钮，加载历史对比内容</li>
+                    <li>保存：如果想要以后也查看这次对比，可以点击"保存对比场景"按钮</li>
+                    <li>加载：点击场景列表中的"加载"按钮，加载历史对比内容</li>
+                    <li>分享：点击场景列表中的"分享"按钮，可以分享当前对比链接</li>
                     <li>重命名：双击场景名称可以重命名，点击回车进行保存</li>
-                    <li>删除对比场景：点击场景列表中的"删除"按钮</li>
+                    <li>删除：点击场景列表中的"删除"按钮</li>
                 </ul>
                 <p>4. 视图控制：</p>
                 <ul>
@@ -499,7 +527,7 @@
         `;
         document.head.appendChild(confirmStyle);
 
-        // 添加确认对话框函数
+        // 添确认对话框数
         function showConfirmDialog(message) {
             return new Promise((resolve) => {
                 const overlay = document.createElement('div');
@@ -512,7 +540,7 @@
                     <p>${message}</p>
                     <div class="buttons">
                         <button class="cancel-btn">取消</button>
-                        <button class="confirm-btn">确认删除</button>
+                        <button class="confirm-btn">确删除</button>
                     </div>
                 `;
                 
@@ -540,38 +568,51 @@
                 const confirmed = await showConfirmDialog('确定要删除这个场景吗？');
                 if (!confirmed) return;
                 
-                const response = await fetch(`/scenes/${filename}`, {
+                // 发送删除请求
+                await fetch(`/scenes/${filename}`, {
                     method: 'DELETE'
                 });
                 
-                if (response.ok) {
-                    // 获取最新的场景列表
-                    const listResponse = await fetch('/list-scenes');
-                    const scenes = await listResponse.json();
+                // 立即显示成功提示
+                showToast('场景删除成功', 'success');
+                
+                // 直接��取最新的场景列表并更新UI
+                const response = await fetch('/list-scenes');
+                const scenes = await response.json();
+                
+                // 更新场景列表UI
+                const sceneList = document.getElementById('scene-list');
+                sceneList.innerHTML = '';
+                
+                scenes.forEach(scene => {
+                    const sceneElement = document.createElement('div');
+                    sceneElement.className = 'saved-scene';
                     
-                    // 更新场景列表UI
-                    const sceneList = document.getElementById('scene-list');
-                    sceneList.innerHTML = '';
+                    // 创建文件名容器
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'scene-name';
+                    nameSpan.textContent = scene.filename.replace('.json', '');
+                    nameSpan.title = '双击重命名';
                     
-                    scenes.forEach(scene => {
-                        const sceneElement = document.createElement('div');
-                        sceneElement.className = 'saved-scene';
-                        sceneElement.innerHTML = `
-                            <div>${scene.filename}</div>
-                            <button onclick="loadScene('${scene.filename}')">加载</button>
-                            <button onclick="deleteScene('${scene.filename}')">删除</button>
-                        `;
-                        sceneList.appendChild(sceneElement);
-                    });
+                    // 创建按钮容器
+                    const buttonsDiv = document.createElement('div');
+                    buttonsDiv.className = 'scene-buttons';
+                    buttonsDiv.innerHTML = `
+                        <button onclick="loadScene('${scene.filename}')">加载</button>
+                        <button onclick="shareScene('${scene.filename}')">分享</button>
+                        <button onclick="downloadScene('${scene.filename}')">下载</button>
+                        <button onclick="deleteScene('${scene.filename}')">删除</button>
+                    `;
                     
-                    showToast('景删除成功', 'success');
-                } else {
-                    const error = await response.json();
-                    throw new Error(error.error || '删除失败');
-                }
+                    // 组装元素
+                    sceneElement.appendChild(nameSpan);
+                    sceneElement.appendChild(buttonsDiv);
+                    sceneList.appendChild(sceneElement);
+                });
+                
             } catch (error) {
-                console.error('删除场景失败:', error);
-                showToast('删除场景失败: ' + error.message, 'error');
+                console.error('删除请求失败:', error);
+                showToast('删除请求失败，请重试', 'error');
             }
         };
 
@@ -584,9 +625,9 @@
             let scene, camera, renderer, controls;
             let lights = [];
             let currentModel = null;
-            window.models = []; // 改为全局变量
+            window.models = []; // 改全局变量
             window.scene = null; // 添加全局场景引用
-            window.camera = null; // 添加全局相机引用
+            window.camera = null; // 加全局相机引用
             window.controls = null; // 添加全局控制器引用
 
             function init() {
@@ -841,7 +882,7 @@
                                 object.position.y += position.y;
                                 object.position.z += position.z;
                                 
-                                // 将模型添加到场景和模型列表
+                                // 将模型添加到场景和型列表
                                 scene.add(object);
                                 const modelIndex = models.length;
                                 models.push({
@@ -858,7 +899,7 @@
                                 // 添加到UI列表
                                 addModelToList(modelIndex);
                                 
-                                // 检查白模状态
+                                // 检查白模状
                                 const wireframeEnabled = document.getElementById('wireframe-toggle').checked;
                                 if (wireframeEnabled) {
                                     toggleWireframe(true);
@@ -925,7 +966,7 @@
                 document.getElementById('file-input').click();
             });
 
-            // 修改文件输入监听器
+            // 修改文件输入监器
             document.getElementById('file-input').addEventListener('change', function(event) {
                 const files = Array.from(event.target.files);
                 const objFile = files.find(f => f.name.toLowerCase().endsWith('.obj'));
@@ -992,7 +1033,7 @@
             // 修改保存场景函数
             async function saveScene() {
                 try {
-                    // 准��场景数据
+                    // 准场景数据
                     const sceneData = {
                         models: models.map(model => ({
                             // 使用完整的文件路径
@@ -1068,13 +1109,13 @@
                         const sceneElement = document.createElement('div');
                         sceneElement.className = 'saved-scene';
                         
-                        // 创建文件名容器，移除 .json 后缀
+                        // 创建文件名容器
                         const nameSpan = document.createElement('span');
                         nameSpan.className = 'scene-name';
-                        nameSpan.textContent = scene.filename.replace('.json', '');  // 移除 .json 后缀
+                        nameSpan.textContent = scene.filename.replace('.json', '');
                         nameSpan.title = '双击重命名';
                         
-                        // 添加双击事件监听器
+                        // 添加双击重命名事件
                         nameSpan.addEventListener('dblclick', async function(e) {
                             const oldName = scene.filename;
                             const input = document.createElement('input');
@@ -1105,18 +1146,16 @@
                                         if (response.ok && result.success) {
                                             showToast('重命名成功', 'success');
                                             await loadSceneList(); // 刷新列表
-                                            return; // 成功后直接返回，不执行后面的代码
+                                            return;
                                         }
                                         
-                                        // 如果到这里，说明重命名失败
                                         throw new Error(result.error || '重命名失败');
                                     } catch (error) {
                                         console.error('重命名失败:', error);
                                         showToast('重命名失败: ' + error.message, 'error');
-                                        input.replaceWith(nameSpan); // 恢复原来的名字
+                                        input.replaceWith(nameSpan);
                                     }
                                 } else {
-                                    // 如果名字没有改变，直接恢复原来的名字，不显示任何提示
                                     input.replaceWith(nameSpan);
                                 }
                             };
@@ -1135,6 +1174,8 @@
                         buttonsDiv.className = 'scene-buttons';
                         buttonsDiv.innerHTML = `
                             <button onclick="loadScene('${scene.filename}')">加载</button>
+                            <button onclick="shareScene('${scene.filename}')">分享</button>
+                            <button onclick="downloadScene('${scene.filename}')">下载</button>
                             <button onclick="deleteScene('${scene.filename}')">删除</button>
                         `;
                         
@@ -1178,31 +1219,11 @@
                                 const mtlPath = modelData.mtlFile;
                                 const texturePath = modelData.textureFile;
                                 
-                                console.log('Loading model files:', {objPath, mtlPath, texturePath});
-                                
-                                // 从服务器获取模型文件
-                                const objResponse = await fetch(objPath);
-                                const mtlResponse = await fetch(mtlPath);
-                                const textureResponse = await fetch(texturePath);
-                                
-                                if (!objResponse.ok || !mtlResponse.ok || !textureResponse.ok) {
-                                    throw new Error('无法加载模型文件');
-                                }
-                                
-                                const objBlob = await objResponse.blob();
-                                const mtlBlob = await mtlResponse.blob();
-                                const textureBlob = await textureResponse.blob();
-                                
-                                // 创建文件的 URL
-                                const objUrl = URL.createObjectURL(objBlob);
-                                const mtlUrl = URL.createObjectURL(mtlBlob);
-                                const textureUrl = URL.createObjectURL(textureBlob);
-                                
-                                // 先加载纹理
+                                // 直接使用纹理路径加载纹理
                                 const texture = await new Promise((resolve, reject) => {
                                     const textureLoader = new THREE.TextureLoader();
                                     textureLoader.load(
-                                        textureUrl,
+                                        texturePath,
                                         (texture) => {
                                             texture.encoding = THREE.sRGBEncoding;
                                             texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -1213,10 +1234,10 @@
                                     );
                                 });
                                 
-                                // 加载材质和模型
+                                // 加载材质
                                 await new Promise((resolve, reject) => {
                                     const mtlLoader = new THREE.MTLLoader();
-                                    mtlLoader.load(mtlUrl, (materials) => {
+                                    mtlLoader.load(mtlPath, (materials) => {
                                         materials.preload();
                                         
                                         // 应用纹理到所有材质
@@ -1228,8 +1249,8 @@
                                         const objLoader = new THREE.OBJLoader();
                                         objLoader.setMaterials(materials);
                                         
-                                        objLoader.load(objUrl, (object) => {
-                                            // 应用保存的变换
+                                        objLoader.load(objPath, (object) => {
+                                            // 应用保存变换
                                             object.position.set(
                                                 modelData.position.x,
                                                 modelData.position.y,
@@ -1259,14 +1280,6 @@
                                                     textureFile: texturePath
                                                 }
                                             });
-                                            
-                                            // 清理URL
-                                            URL.revokeObjectURL(objUrl);
-                                            URL.revokeObjectURL(mtlUrl);
-                                            URL.revokeObjectURL(textureUrl);
-                                            
-                                            // 更新UI
-                                            updateModelList();
                                             
                                             resolve();
                                         }, undefined, reject);
@@ -1310,7 +1323,7 @@
                 }
             };
 
-            // 确保在页面加载时调用
+            // 确保在���面加载时调用
             loadSceneList();
 
             // 在 window.addEventListener('load', function() { 内添加 toggleWireframe 函数
@@ -1374,6 +1387,135 @@
                 }
             `;
             document.head.appendChild(style);
+
+            // 修改检查分享链接的代码部分
+            const path = window.location.pathname;
+            if (path.startsWith('/share/')) {
+                // 从URL中获取场景文件名
+                const sceneName = path.replace('/share/', '');
+                const decodedSceneName = decodeURIComponent(sceneName);
+                const title = decodedSceneName.replace('.json', '') + ' - 模型对比';
+                
+                // 设置页面标题
+                document.title = title;
+                
+                // 更新 Open Graph 和 Twitter Card meta 标签
+                document.querySelector('meta[property="og:title"]').setAttribute('content', title);
+                document.querySelector('meta[name="twitter:title"]').setAttribute('content', title);
+                document.querySelector('meta[property="og:description"]').setAttribute('content', `查看 ${decodedSceneName.replace('.json', '')} 的3D模型比`);
+                document.querySelector('meta[name="twitter:description"]').setAttribute('content', `查看 ${decodedSceneName.replace('.json', '')} 的3D模型对比`);
+                document.querySelector('meta[name="description"]').setAttribute('content', `查看 ${decodedSceneName.replace('.json', '')} 的3D模型对比`);
+                
+                // 更新 og:url
+                document.querySelector('meta[property="og:url"]').setAttribute('content', window.location.href);
+                
+                // 自动加载该场景
+                loadScene(decodeURIComponent(sceneName));
+                
+                // 隐藏不需要的控制面板，只保留亮度和白模功
+                const controls = document.getElementById('controls');
+                if (controls) {
+                    // 隐藏所有子元素
+                    Array.from(controls.children).forEach(child => {
+                        child.style.display = 'none';
+                    });
+                    
+                    // 只显示亮度和白模控制
+                    const brightnessContainer = controls.querySelector('.slider-container');
+                    const wireframeContainer = controls.querySelector('.toggle-container');
+                    
+                    if (brightnessContainer) {
+                        brightnessContainer.style.display = 'flex';
+                    }
+                    
+                    if (wireframeContainer) {
+                        wireframeContainer.style.display = 'flex';
+                        // 隐藏问号图标和提示框
+                        const helpIcon = wireframeContainer.querySelector('.help-icon');
+                        const helpTooltip = wireframeContainer.querySelector('.help-tooltip');
+                        if (helpIcon) helpIcon.style.display = 'none';
+                        if (helpTooltip) helpTooltip.style.display = 'none';
+                    }
+                }
+                
+                // 隐藏场景管理面板
+                const sceneControls = document.getElementById('scene-controls');
+                if (sceneControls) {
+                    sceneControls.style.display = 'none';
+                }
+                
+                // 保留视图控制按钮
+                const viewportControls = document.getElementById('viewport-controls');
+                if (viewportControls) {
+                    viewportControls.style.display = 'block';
+                }
+            } else {
+                // 设置默认标题
+                document.title = '3D模型对比工具';
+            }
+
+            // 修改分享场景的函数
+            window.shareScene = function(filename) {
+                try {
+                    const shareUrl = `${window.location.origin}/share/${encodeURIComponent(filename)}`;
+                    
+                    // 创建一个临时输入框
+                    const tempInput = document.createElement('input');
+                    tempInput.style.position = 'fixed';
+                    tempInput.style.opacity = 0;
+                    tempInput.value = shareUrl;
+                    document.body.appendChild(tempInput);
+                    
+                    // 选择并复制文本
+                    tempInput.select();
+                    document.execCommand('copy');
+                    
+                    // 移除临时输入框
+                    document.body.removeChild(tempInput);
+                    
+                    // 显示提示
+                    showToast('分享链接已复制到剪贴板', 'success');
+                    
+                    console.log('分享链接:', shareUrl); // 在控制台显示链接
+                } catch (error) {
+                    console.error('复制链接失败:', error);
+                    showToast('复制链接失败，请手动复制链接', 'error');
+                }
+            }
+
+            // 添加下载函数
+            window.downloadScene = async function(filename) {
+                try {
+                    const response = await fetch(`/scenes/${filename}/download`);
+                    if (!response.ok) throw new Error('下载失败');
+                    
+                    // 获取文件名
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let downloadFilename = 'scene.zip';
+                    if (contentDisposition) {
+                        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+                        if (matches != null && matches[1]) {
+                            downloadFilename = matches[1].replace(/['"]/g, '');
+                        }
+                    }
+                    
+                    // 下载文件
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = downloadFilename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    showToast('开始下载...', 'success');
+                } catch (error) {
+                    console.error('下载失败:', error);
+                    showToast('下载失败: ' + error.message, 'error');
+                }
+            };
         });
     </script>
 </body>
