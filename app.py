@@ -10,6 +10,7 @@ import zipfile
 import io
 
 app = Flask(__name__)
+print("Flask app created")
 app.secret_key = 'your-secret-key-here'
 CORS(app)
 
@@ -331,6 +332,7 @@ def download_scene(filename):
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    print("Starting Flask server...")
     print(f"上传目录: {UPLOAD_FOLDER}")
     print(f"场景目录: {SCENES_FOLDER}")
     

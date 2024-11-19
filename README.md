@@ -29,13 +29,17 @@ Node.js (如果使用 server.js)
    git clone <项目仓库地址>
    cd 项目目录
 
-2. 安装 Python 依赖：
+2. 创建虚拟环境：python -m venv venv
+
+3. 激活虚拟环境：.\venv\Scripts\activate
+
+4. 安装 Python 依赖：
    pip install -r requirements.txt
 
-3. 运行 Flask 应用：
+5. 运行 Flask 应用：
    python app.py
 
-4. 在浏览器中打开 http://localhost:3000 查看应用。
+6. 在浏览器中打开 http://localhost:3000 查看应用。
 
 ## 功能
 上传模型: 支持 .obj, .mtl, .jpg 文件
@@ -51,6 +55,8 @@ Node.js (如果使用 server.js)
 加载场景: 点击场景列表中的“加载”按钮
 重命名: 双击场景名称可以重命名
 删除场景: 点击场景列表中的“删除”按钮
+分享场景: 点击场景列表中的“分享”按钮
+下载场景: 点击场景列表中的“下载”按钮
 视图控制:
 亮度调节: 使用亮度滑块调整场景亮度
 白模显示: 切换开关显示白模效果
