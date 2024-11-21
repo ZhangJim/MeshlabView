@@ -8,6 +8,7 @@ from flask_cors import CORS
 from urllib.parse import unquote
 import zipfile
 import io
+import re
 
 app = Flask(__name__)
 print("Flask app created")
@@ -17,14 +18,17 @@ CORS(app)
 # 配置文件保存路径
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 SCENES_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+ORIGINAL_IMAGES_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'original_images')
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['SCENES_FOLDER'] = SCENES_FOLDER
+app.config['ORIGINAL_IMAGES_FOLDER'] = ORIGINAL_IMAGES_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 # 确保必要的文件夹存在
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(SCENES_FOLDER, exist_ok=True)
+os.makedirs(ORIGINAL_IMAGES_FOLDER, exist_ok=True)
 
 # 允许的文件类型
 ALLOWED_EXTENSIONS = {'obj', 'mtl', 'jpg', 'jpeg', 'png'}
@@ -48,6 +52,26 @@ def save_scene():
         # 生成格式化的场景文件名: YY-MM-DD_HH-mm-ss
         timestamp = time.strftime("%y-%m-%d_%H-%M-%S", time.localtime())
         filename = f'scene-{timestamp}.json'
+        scene_name = f'scene-{timestamp}'
+        
+        # 遍历所有临时原图文件,重命名并记录到场景数据中
+        original_images = []
+        for file in os.listdir(app.config['ORIGINAL_IMAGES_FOLDER']):
+            if file.startswith('temp_'):
+                match = re.search(r'temp_\d+_model_(\d+)_', file)
+                if match:
+                    model_index = int(match.group(1))
+                    new_filename = file.replace(file[:file.find('_model_')], scene_name)
+                    old_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], file)
+                    new_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], new_filename)
+                    os.rename(old_path, new_path)
+                    original_images.append({
+                        'model_index': model_index,
+                        'filename': new_filename
+                    })
+        
+        # 将原图信息添加到场景数据中
+        scene_data['original_images'] = original_images
         
         # 保存场景数据
         filepath = os.path.join(app.config['SCENES_FOLDER'], filename)
@@ -57,7 +81,7 @@ def save_scene():
         return jsonify({'success': True, 'filename': filename})
     except Exception as e:
         print(f"保存场景错误: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/scenes/<filename>', methods=['GET'])
 def get_scene(filename):
@@ -127,30 +151,63 @@ def upload_file():
             return jsonify({'error': '没有选择文件'}), 400
             
         if file and allowed_file(file.filename):
-            # 清除旧的session时间戳
-            session.pop('current_upload_timestamp', None)
-            
             # 获取或创建新的时间戳文件夹名
             timestamp = session.get('current_upload_timestamp')
             if not timestamp:
                 current_time = time.localtime()
-                # 使用原来的格式 YY-MM-DD_HH-MM-SS
                 timestamp = time.strftime("%y-%m-%d_%H-%M-%S", current_time)
                 session['current_upload_timestamp'] = timestamp
+                print(f"创建新的时间戳: {timestamp}")
+            else:
+                print(f"使用现有时间戳: {timestamp}")
             
             folder_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamp)
             os.makedirs(folder_path, exist_ok=True)
             
             filename = secure_filename(file.filename)
             filepath = os.path.join(folder_path, filename)
-            print(f"保存路径: {filepath}")
             
-            file.save(filepath)
+            # 如果是OBJ文件，检查并添加材质声明
+            if filename.lower().endswith('.obj'):
+                # 先保存文件
+                file.save(filepath)
+                
+                # 读取文件内容
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 检查是否包含材质声明
+                if 'usemtl material_0' not in content:
+                    print(f"OBJ文件缺少材质声明，正在添加: {filename}")
+                    
+                    # 在文件开头添加材质声明（在mtllib行之后）
+                    lines = content.split('\n')
+                    insert_index = 0
+                    
+                    # 找到mtllib行的位置
+                    for i, line in enumerate(lines):
+                        if line.startswith('mtllib'):
+                            insert_index = i + 1
+                            break
+                    
+                    # 插入材质声明
+                    lines.insert(insert_index, 'usemtl material_0')
+                    
+                    # 保存修改后的文件
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write('\n'.join(lines))
+                    
+                    print(f"已添加材质声明到文件: {filename}")
+            else:
+                # 非OBJ文件直接保存
+                file.save(filepath)
+            
             print(f"文件保存成功: {filepath}")
             
-            # 如果是jpg文件，说明是最后一个文件，清除session中的时间戳
+            # 只在上传完整组文件后清除session
             if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
                 session.pop('current_upload_timestamp', None)
+                print("上传完成，清除时间戳")
             
             return jsonify({
                 'success': True, 
@@ -174,7 +231,7 @@ def uploaded_file(filepath):
         print(f"文件访问错误: {str(e)}")
         return jsonify({'error': str(e)}), 404
 
-# 添加CORS支持
+# 添加CORS支
 @app.after_request
 def after_request(response):
     response.headers.update({
@@ -205,7 +262,7 @@ def rename_scene(old_filename):
         if not new_name.endswith('.json'):
             new_name += '.json'
             
-        # URL解码文名，处理中文和特字符
+        # URL解码文件名，处理中文和特殊字符
         old_filename = unquote(old_filename)
             
         old_path = os.path.join(app.config['SCENES_FOLDER'], old_filename)
@@ -221,9 +278,34 @@ def rename_scene(old_filename):
             print(f"新文件名已存在: {new_path}")  # 调试日志
             return jsonify({'error': '文件名已存在'}), 400
             
-        os.rename(old_path, new_path)
-        print(f"重命名成功")  # 调试日志
+        # 读取场景数据以获取原图信息
+        with open(old_path, 'r', encoding='utf-8') as f:
+            scene_data = json.load(f)
         
+        # 重命名场景文件
+        os.rename(old_path, new_path)
+        
+        # 获取旧的和新的场景名（不包含.json后缀）
+        old_scene_name = old_filename.replace('.json', '')
+        new_scene_name = new_name.replace('.json', '')
+        
+        # 重命名所有相关的原图文件
+        if 'original_images' in scene_data:
+            for image in scene_data['original_images']:
+                old_image_name = image['filename']
+                new_image_name = old_image_name.replace(old_scene_name, new_scene_name)
+                old_image_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], old_image_name)
+                new_image_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], new_image_name)
+                if os.path.exists(old_image_path):
+                    os.rename(old_image_path, new_image_path)
+                    image['filename'] = new_image_name
+                    print(f"重命名原图: {old_image_path} -> {new_image_path}")  # 调试日志
+        
+        # 保存更新后的场景数据
+        with open(new_path, 'w', encoding='utf-8') as f:
+            json.dump(scene_data, f, ensure_ascii=False)
+        
+        print(f"重命名成功")  # 调试日志
         return jsonify({'success': True, 'newFilename': new_name})
     except Exception as e:
         print(f"重命名错误: {str(e)}")  # 调试日志
@@ -262,7 +344,7 @@ def share_scene(filename):
     <meta name="twitter:title" content="{title} - 模型对比">
     <meta name="twitter:description" content="查看 {title} 的3D模型对比">
     <meta name="description" content="查看 {title} 的3D模型对比">
-    <meta name="keywords" content="3D模型,模型对比,{title}">''')
+    <meta name="keywords" content="3D模型,型对比,{title}">''')
             
         return modified_html
         
@@ -313,6 +395,16 @@ def download_scene(filename):
                         texture_path = os.path.join(app.root_path, model['textureFile'].lstrip('/'))
                         if os.path.exists(texture_path):
                             zf.write(texture_path, f'{model_folder}/{os.path.basename(texture_path)}')
+                    
+                    # 检查并添加原图（如果存在）
+                    scene_name = base_folder
+                    for filename in os.listdir(app.config['ORIGINAL_IMAGES_FOLDER']):
+                        if filename.startswith(f"{scene_name}_model_{i-1}_"):
+                            original_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], filename)
+                            # 保持原始扩展名
+                            original_ext = os.path.splitext(filename)[1]
+                            zf.write(original_path, f'{model_folder}/original{original_ext}')
+                            break
         
         # 将文件指针移到开始
         memory_file.seek(0)
@@ -331,10 +423,96 @@ def download_scene(filename):
         print(f"下载场景错误: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/upload_original_image', methods=['POST'])
+def upload_original_image():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    scene_name = request.form.get('scene_name')
+    model_index = request.form.get('model_index')
+    
+    print(f"上传原图: scene_name={scene_name}, model_index={model_index}")  # 调试日志
+    
+    if file and allowed_file(file.filename):
+        # 修改这里：使用scene_name作为前缀，而不是temp_timestamp
+        filename = f"{scene_name}_model_{model_index}_{secure_filename(file.filename)}"
+        
+        # 删除已存在的原图
+        for existing_file in os.listdir(app.config['ORIGINAL_IMAGES_FOLDER']):
+            if existing_file.startswith(f"{scene_name}_model_{model_index}_"):
+                os.remove(os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], existing_file))
+        
+        file_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], filename)
+        file.save(file_path)
+        print(f"保存原图: {filename}")  # 调试日志
+        return jsonify({'success': True, 'filename': filename})
+    
+    return jsonify({'error': 'Invalid file'}), 400
+
+@app.route('/delete_original_image', methods=['POST'])
+def delete_original_image():
+    scene_name = request.json.get('scene_name')
+    model_index = request.json.get('model_index')
+    
+    for filename in os.listdir(app.config['ORIGINAL_IMAGES_FOLDER']):
+        if filename.startswith(f"{scene_name}_model_{model_index}_"):
+            os.remove(os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], filename))
+            return jsonify({'success': True})
+    
+    return jsonify({'error': 'File not found'}), 404
+
+@app.route('/get_original_image/<scene_name>/<model_index>')
+def get_original_image(scene_name, model_index):
+    scene_name = unquote(scene_name)
+    print(f"查找原图: scene_name={scene_name}, model_index={model_index}")  # 调试日志
+    
+    for filename in os.listdir(app.config['ORIGINAL_IMAGES_FOLDER']):
+        print(f"检查文件: {filename}")  # 调试日志
+        if filename.startswith(f"{scene_name}_model_{model_index}_"):
+            print(f"找到匹配文件: {filename}")  # 调试日志
+            return send_from_directory(app.config['ORIGINAL_IMAGES_FOLDER'], filename)
+    
+    print("未找到匹配的原图")  # 调试日志
+    return jsonify({'error': 'Image not found'}), 404
+
+@app.route('/copy_original_image', methods=['POST'])
+def copy_original_image():
+    try:
+        data = request.get_json()
+        old_scene_name = data.get('oldSceneName')
+        new_scene_name = data.get('newSceneName')
+        model_index = data.get('modelIndex')
+        
+        # 查找旧的原图
+        old_image = None
+        for filename in os.listdir(app.config['ORIGINAL_IMAGES_FOLDER']):
+            if filename.startswith(f"{old_scene_name}_model_{model_index}_"):
+                old_image = filename
+                break
+        
+        if old_image:
+            # 构建新的文件名
+            new_image = old_image.replace(old_scene_name, new_scene_name)
+            
+            # 复制文件
+            old_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], old_image)
+            new_path = os.path.join(app.config['ORIGINAL_IMAGES_FOLDER'], new_image)
+            shutil.copy2(old_path, new_path)
+            
+            # 删除旧文件
+            os.remove(old_path)
+            
+            return jsonify({'success': True})
+            
+    except Exception as e:
+        print(f"复制原图错误: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     print("Starting Flask server...")
     print(f"上传目录: {UPLOAD_FOLDER}")
     print(f"场景目录: {SCENES_FOLDER}")
+    print(f"原始图像目录: {ORIGINAL_IMAGES_FOLDER}")
     
     # 启动服务器
     app.run(debug=True, host='0.0.0.0', port=3000, threaded=True) 
